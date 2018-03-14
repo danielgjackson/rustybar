@@ -147,6 +147,34 @@ fn generate(bytes: Vec<u8>) -> Vec<char> {
     return out;
 }
 
+fn squish(input: &Vec<char>) -> Vec<char> {
+    let mut out: Vec<char> = vec!();
+    let out_width = (input.len() + 1) / 2;
+    println!("WIDTH: {}", out_width);
+    for i in 0..out_width {
+        let a = input[i * 2];
+        let b;
+        if (i * 2 + 1 >= input.len()) {
+            b = ' ';
+        } else {
+            b = input[i * 2 + 1];
+        }
+        if a != ' ' && b != ' ' {
+            out.push('█');
+        } else if a != ' ' && b == ' ' {
+            out.push('\u{258C}');   // left
+        } else if a == ' ' && b != ' ' {
+            out.push('\u{2590}');   // right
+        } else if a == ' ' && b == ' ' {
+            out.push(' ');
+        } else {
+            out.push('?'); // TODO: Learn more rust so this doesn't happen
+        }
+    }
+    return out;
+}
+
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut bytes: Vec<u8> = vec!();    
@@ -181,8 +209,12 @@ fn main() {
     }
 
     let out = generate(bytes);
-    let out_str: String = out.into_iter().collect();
+
+    let out2 = squish(&out);
+    
+    let out_str: String = out2.into_iter().collect();
     for _j in 0..HEIGHT {
         println!("{}", out_str);
     }
+
 }
