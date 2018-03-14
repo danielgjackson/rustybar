@@ -11,5 +11,5 @@ Uses "CODE B" only, so works with ASCII characters 32-128, and is not as efficie
 To start:
 
 ```bash
-cargo run Hello"
+cargo run "Hello"
 ```
