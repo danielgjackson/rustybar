@@ -1,0 +1,6 @@
+[package]
+name = "rustybar"
+version = "0.1.0"
+authors = ["Dan Jackson <email@danieljackson.co.uk>"]
+
+[dependencies]
