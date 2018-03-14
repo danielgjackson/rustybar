@@ -1,6 +1,10 @@
 use std::env;
 
-const CODE128 : [u32; 108] = [
+const INVERT: bool = true;
+
+const HEIGHT: u32 = 8;
+
+const CODE128: [u32; 108] = [
   //BSBSBSbs val  CA  CB  CC = representation
   0x21222200, //   0  SP  SP  00 = 32
   0x22212200, //   1   !   !  01 = 33
@@ -109,7 +113,7 @@ const CODE128 : [u32; 108] = [
   0x21121400, // 104 _SB _SB _SB =136 _SB="START (Code B)"
   0x21123200, // 105 _SC _SC _SC =137 _SC="START (Code C)"
   0x23311120, // 106 _ST _ST _ST =138 _ST="STOP"
-  0x0000000F, // 107 SPACE
+  0x0000000A, // 107 _QZ _QZ _QZ =139 _QZ="QUIET"
 ];
 
 fn generate(bytes: Vec<u8>) -> Vec<char> {
@@ -122,13 +126,21 @@ fn generate(bytes: Vec<u8>) -> Vec<char> {
             let band_mask = 0x000000F0u32 << shift;
             let band = (code & band_mask) >> (shift + 4);
             for _j in 0..band {
-                out.push(' ');
+                if INVERT {
+                    out.push(' ');
+                } else {
+                    out.push('█');
+                }
             }
 
             let space_mask = 0x0000000Fu32 << shift;
             let space = (code & space_mask) >> shift;
             for _j in 0..space {
-                out.push('█');
+                if INVERT {
+                    out.push('█');
+                } else {
+                    out.push(' ');
+                }
             }
         }
     }
@@ -138,7 +150,6 @@ fn generate(bytes: Vec<u8>) -> Vec<char> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut bytes: Vec<u8> = vec!();    
-    bytes.push(107);    // guard space
     bytes.push(104);    // start (B)
     for arg in &args[1..] {
         for c in arg.chars() { 
@@ -162,10 +173,16 @@ fn main() {
     checksum %= 103;
     bytes.push(checksum as u8); // checksum
     bytes.push(106);            // stop
-    bytes.push(107);            // guard space
+
+    // Add quiet (after checksum calculation)
+    if INVERT {
+        bytes.insert(0, 107);       // quiet
+        bytes.push(107);            // quiet
+    }
+
     let out = generate(bytes);
     let out_str: String = out.into_iter().collect();
-    for _j in 0..8 {
-        println!("{:?}", out_str);
+    for _j in 0..HEIGHT {
+        println!("{}", out_str);
     }
 }
