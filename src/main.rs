@@ -4,7 +4,15 @@ const DEFAULT_INVERT: bool = true;
 const DEFAULT_NARROW: bool = true;
 const DEFAULT_HEIGHT: u32 = 4;
 
-const CODE128: [u32; 108] = [
+#[derive(PartialEq, Eq, Copy, Clone)]
+enum Code {
+    None = 0,
+    CodeA,
+    CodeB,
+    CodeC,
+}
+
+const CODE128: [u32; 109] = [
   //BSBSBSbs     val  CA  CB  CC = representation
   0x21222200, //   0  SP  SP  00 = 32
   0x22212200, //   1   !   !  01 = 33
@@ -114,6 +122,7 @@ const CODE128: [u32; 108] = [
   0x21123200, // 105 _SC _SC _SC =137 _SC="START (Code C)"
   0x23311120, // 106 _ST _ST _ST =138 _ST="STOP"
   0x0000000A, // 107 _QZ _QZ _QZ =139 _QZ="QUIET"
+  0x00000000, // 108 _NO _NO _NO =140 _NO=(none)
 ];
 
 fn generate(symbols: &Vec<u8>) -> Vec<bool> {
@@ -145,8 +154,8 @@ fn render_wide(input: &Vec<bool>, invert: bool) -> Vec<char> {
         let bar = input[i] ^ invert;
         out.push(
             match bar {
-                true  => '█',
-                false => ' ',
+                true  => '\u{2588}', // block '█'
+                false => '\u{0020}', // space ' '
             }
         );
     }
@@ -161,15 +170,84 @@ fn render_narrow(input: &Vec<bool>, invert: bool) -> Vec<char> {
         let bar1 = if i * 2 + 1 < input.len() { input[i * 2 + 1] ^ invert } else { false };
         out.push(
             match (bar0, bar1) {
-                ( true,  true) => '█',
-                ( true, false) => '\u{258C}', // left
-                (false,  true) => '\u{2590}', // right
-                (false, false) => ' ',
+                ( true,  true) => '\u{2588}', // block '█'
+                ( true, false) => '\u{258C}', // left '▌'
+                (false,  true) => '\u{2590}', // right '▐'
+                (false, false) => '\u{0020}', // space ' '
             }
         );
     }
     return out;
 }
+
+fn code_symbol(current_code: Code, new_code: Code) -> u8 {
+    return match (current_code, new_code) {
+        (Code::CodeA, Code::CodeC) | (Code::CodeB, Code::CodeC) => 99,  // CODE C
+        (Code::CodeA, Code::CodeB) | (Code::CodeC, Code::CodeB) => 100, // CODE B
+        (Code::CodeB, Code::CodeA) | (Code::CodeC, Code::CodeA) => 101, // CODE A
+        (Code::None, Code::CodeA) => 103,                               // START (Code A)
+        (Code::None, Code::CodeB) => 104,                               // START (Code B)
+        (Code::None, Code::CodeC) => 105,                               // START (Code C)
+        _ => 108,   // (none)
+    }
+}
+
+fn required_code(value: u8) -> Code {
+    match value {
+        0...32 => Code::CodeA,          // Must be Code A
+        b'\''...b'\x7f' => Code::CodeB, // Must be Code B
+        // b'0'...b'9' => Code::CodeC,     // Prefer Code C (if multiple)
+        _ => Code::None,                // No preference
+    }
+}
+
+fn add_symbols(symbols: &mut Vec<u8>, arg: &String, existing_code: Code) -> Code {
+    let mut current_code = existing_code;
+
+    for c in arg.chars() {
+        let b = c as u8;
+        let mut code = required_code(b);
+        if code == Code::None {
+            code = Code::CodeB;
+        }
+        if current_code != code {
+            symbols.push(code_symbol(current_code, code));
+            current_code = code;
+        }
+        if b < b' ' {
+            symbols.push(c as u8 + 64);
+        } else {
+            symbols.push(c as u8 - 32);
+        }
+    }
+
+    // Empty barcodes should still be valid
+    if symbols.len() == 0 && current_code == Code::None {
+        symbols.push(104);    // start (B)
+        current_code = Code::CodeB;
+    }
+
+    return current_code;
+}
+
+
+fn calculate_checksum(symbols: &Vec<u8>) -> u8
+{
+    // checksum = SUM<(i+1) * X[i]> % 103
+    let mut checksum: u32 = 0;
+    let mut position: u32 = 0;
+    for b in symbols {
+        if position == 0 {
+            checksum = *b as u32;
+        } else {
+            checksum += position * *b as u32;
+        }
+        position += 1;
+    }
+    checksum %= 103;
+    return checksum as u8;
+}
+
 
 fn main() {
     let height = DEFAULT_HEIGHT;
@@ -177,35 +255,32 @@ fn main() {
     let narrow = DEFAULT_NARROW;
     let args: Vec<String> = env::args().collect();
     let mut symbols: Vec<u8> = vec!();
+
     for arg in &args[1..] {
+        let code = Code::None;
         symbols.clear();
-        symbols.push(104);    // start (B)
 
-        for c in arg.chars() { 
-            symbols.push(c as u8 - 32);
-        }
+        // Add the required symbols
+        //code = 
+        add_symbols(&mut symbols, arg, code);
 
-        // checksum = SUM<(i+1) * X[i]> % 103
-        let mut checksum: u32 = 0;
-        let mut position: u32 = 0;
-        for b in &symbols {
-            if position == 0 {
-                checksum = *b as u32;
-            } else {
-                checksum += position * *b as u32;
-            }
-            position += 1;
-        }
-        checksum %= 103;
-        symbols.push(checksum as u8); // checksum
-        symbols.push(106);            // stop
+        // println!("{:?}", symbols);
 
-        // Add quiet zone (only after checksum calculation)
-        symbols.insert(0, 107);       // quiet
-        symbols.push(107);            // quiet
+        // Calculate the checksum as the symbol before the end
+        let checksum = calculate_checksum(&symbols);
+        symbols.push(checksum);         // checksum
 
+        // Barcodes must end with a stop symbol
+        symbols.push(106);              // stop
+
+        // Force a quiet zone at either side
+        symbols.insert(0, 107);         // quiet
+        symbols.push(107);              // quiet
+
+        // Generate bars for symbols
         let bars = generate(&symbols);
 
+        // Generate output string from bars
         let out;
         if narrow {
             out = render_narrow(&bars, invert);
@@ -213,6 +288,7 @@ fn main() {
             out = render_wide(&bars, invert);
         }
         
+        // Render output
         let out_str: String = out.into_iter().collect();
         for _j in 0..height {
             println!("{}", out_str);
