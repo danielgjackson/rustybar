@@ -1,9 +1,8 @@
 use std::env;
 
-const INVERT: bool = true;
-const HALF_WIDTH: bool = true;
-
-const HEIGHT: u32 = 4;
+const DEFAULT_INVERT: bool = true;
+const DEFAULT_NARROW: bool = true;
+const DEFAULT_HEIGHT: u32 = 4;
 
 const CODE128: [u32; 108] = [
   //BSBSBSbs val  CA  CB  CC = representation
@@ -140,10 +139,10 @@ fn generate(bytes: &Vec<u8>) -> Vec<bool> {
     return out;
 }
 
-fn render_wide(input: &Vec<bool>) -> Vec<char> {
+fn render_wide(input: &Vec<bool>, invert: bool) -> Vec<char> {
     let mut out: Vec<char> = vec!();
     for i in 0..input.len() {
-        let a = input[i] ^ INVERT;
+        let a = input[i] ^ invert;
         if a {
             out.push('█');
         } else {
@@ -153,16 +152,16 @@ fn render_wide(input: &Vec<bool>) -> Vec<char> {
     return out;
 }
 
-fn render_narrow(input: &Vec<bool>) -> Vec<char> {
+fn render_narrow(input: &Vec<bool>, invert: bool) -> Vec<char> {
     let mut out: Vec<char> = vec!();
     let out_width = (input.len() + 1) / 2;
     for i in 0..out_width {
-        let a = input[i * 2] ^ INVERT;
+        let a = input[i * 2] ^ invert;
         let b;
         if i * 2 + 1 >= input.len() {
             b = false;
         } else {
-            b = input[i * 2 + 1] ^ INVERT;
+            b = input[i * 2 + 1] ^ invert;
         }
         if a && b {
             out.push('█');
@@ -178,6 +177,9 @@ fn render_narrow(input: &Vec<bool>) -> Vec<char> {
 }
 
 fn main() {
+    let height = DEFAULT_HEIGHT;
+    let invert = DEFAULT_INVERT;
+    let narrow = DEFAULT_NARROW;
     let args: Vec<String> = env::args().collect();
     let mut bytes: Vec<u8> = vec!();    
     bytes.push(104);    // start (B)
@@ -204,23 +206,21 @@ fn main() {
     bytes.push(checksum as u8); // checksum
     bytes.push(106);            // stop
 
-    // When inverting (white-on-black) add quiet zone (only do this after checksum calculation)
-    if INVERT {
-        bytes.insert(0, 107);       // quiet
-        bytes.push(107);            // quiet
-    }
+    // Add quiet zone (only after checksum calculation)
+    bytes.insert(0, 107);       // quiet
+    bytes.push(107);            // quiet
 
     let bars = generate(&bytes);
 
     let out;
-    if HALF_WIDTH {
-        out = render_narrow(&bars);
+    if narrow {
+        out = render_narrow(&bars, invert);
     } else {
-        out = render_wide(&bars);
+        out = render_wide(&bars, invert);
     }
     
     let out_str: String = out.into_iter().collect();
-    for _j in 0..HEIGHT {
+    for _j in 0..height {
         println!("{}", out_str);
     }
 
