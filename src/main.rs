@@ -1,8 +1,9 @@
 use std::env;
 
 const INVERT: bool = true;
+const HALF_WIDTH: bool = true;
 
-const HEIGHT: u32 = 8;
+const HEIGHT: u32 = 4;
 
 const CODE128: [u32; 108] = [
   //BSBSBSbs val  CA  CB  CC = representation
@@ -116,64 +117,65 @@ const CODE128: [u32; 108] = [
   0x0000000A, // 107 _QZ _QZ _QZ =139 _QZ="QUIET"
 ];
 
-fn generate(bytes: Vec<u8>) -> Vec<char> {
-    let mut out: Vec<char> = vec!();
+fn generate(bytes: &Vec<u8>) -> Vec<bool> {
+    let mut out: Vec<bool> = vec!();
     for b in bytes {
-        let code = CODE128[b as usize];
+        let code = CODE128[*b as usize];
         for i in 0..4 {
             let shift = (3 - i) * 8;
 
             let band_mask = 0x000000F0u32 << shift;
             let band = (code & band_mask) >> (shift + 4);
             for _j in 0..band {
-                if INVERT {
-                    out.push(' ');
-                } else {
-                    out.push('█');
-                }
+                out.push(true);
             }
 
             let space_mask = 0x0000000Fu32 << shift;
             let space = (code & space_mask) >> shift;
             for _j in 0..space {
-                if INVERT {
-                    out.push('█');
-                } else {
-                    out.push(' ');
-                }
+                out.push(false);
             }
         }
     }
     return out;
 }
 
-fn squish(input: &Vec<char>) -> Vec<char> {
+fn render_wide(input: &Vec<bool>) -> Vec<char> {
     let mut out: Vec<char> = vec!();
-    let out_width = (input.len() + 1) / 2;
-    println!("WIDTH: {}", out_width);
-    for i in 0..out_width {
-        let a = input[i * 2];
-        let b;
-        if i * 2 + 1 >= input.len() {
-            b = ' ';
-        } else {
-            b = input[i * 2 + 1];
-        }
-        if a != ' ' && b != ' ' {
+    for i in 0..input.len() {
+        let a = input[i] ^ INVERT;
+        if a {
             out.push('█');
-        } else if a != ' ' && b == ' ' {
-            out.push('\u{258C}');   // left
-        } else if a == ' ' && b != ' ' {
-            out.push('\u{2590}');   // right
-        } else if a == ' ' && b == ' ' {
-            out.push(' ');
         } else {
-            out.push('?'); // TODO: Learn more rust so this doesn't happen
+            out.push(' ');
         }
     }
     return out;
 }
 
+fn render_narrow(input: &Vec<bool>) -> Vec<char> {
+    let mut out: Vec<char> = vec!();
+    let out_width = (input.len() + 1) / 2;
+    for i in 0..out_width {
+        let a = input[i * 2] ^ INVERT;
+        let b;
+        if i * 2 + 1 >= input.len() {
+            b = false;
+        } else {
+            b = input[i * 2 + 1] ^ INVERT;
+        }
+        if a && b {
+            out.push('█');
+        } else if a && !b {
+            out.push('\u{258C}');   // left
+        } else if !a && b {
+            out.push('\u{2590}');   // right
+        } else if !a && !b {
+            out.push(' ');
+        }
+    }
+    return out;
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -202,17 +204,22 @@ fn main() {
     bytes.push(checksum as u8); // checksum
     bytes.push(106);            // stop
 
-    // Add quiet (after checksum calculation)
+    // When inverting (white-on-black) add quiet zone (only do this after checksum calculation)
     if INVERT {
         bytes.insert(0, 107);       // quiet
         bytes.push(107);            // quiet
     }
 
-    let out = generate(bytes);
+    let bars = generate(&bytes);
 
-    let out2 = squish(&out);
+    let out;
+    if HALF_WIDTH {
+        out = render_narrow(&bars);
+    } else {
+        out = render_wide(&bars);
+    }
     
-    let out_str: String = out2.into_iter().collect();
+    let out_str: String = out.into_iter().collect();
     for _j in 0..HEIGHT {
         println!("{}", out_str);
     }
