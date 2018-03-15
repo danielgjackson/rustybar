@@ -5,7 +5,7 @@ const DEFAULT_NARROW: bool = true;
 const DEFAULT_HEIGHT: u32 = 4;
 
 const CODE128: [u32; 108] = [
-  //BSBSBSbs val  CA  CB  CC = representation
+  //BSBSBSbs     val  CA  CB  CC = representation
   0x21222200, //   0  SP  SP  00 = 32
   0x22212200, //   1   !   !  01 = 33
   0x22222100, //   2   "   "  02 = 34
@@ -116,9 +116,9 @@ const CODE128: [u32; 108] = [
   0x0000000A, // 107 _QZ _QZ _QZ =139 _QZ="QUIET"
 ];
 
-fn generate(bytes: &Vec<u8>) -> Vec<bool> {
+fn generate(symbols: &Vec<u8>) -> Vec<bool> {
     let mut out: Vec<bool> = vec!();
-    for b in bytes {
+    for b in symbols {
         let code = CODE128[*b as usize];
         for i in 0..4 {
             let shift = (3 - i) * 8;
@@ -142,12 +142,13 @@ fn generate(bytes: &Vec<u8>) -> Vec<bool> {
 fn render_wide(input: &Vec<bool>, invert: bool) -> Vec<char> {
     let mut out: Vec<char> = vec!();
     for i in 0..input.len() {
-        let a = input[i] ^ invert;
-        if a {
-            out.push('█');
-        } else {
-            out.push(' ');
-        }
+        let bar = input[i] ^ invert;
+        out.push(
+            match bar {
+                true  => '█',
+                false => ' ',
+            }
+        );
     }
     return out;
 }
@@ -156,22 +157,16 @@ fn render_narrow(input: &Vec<bool>, invert: bool) -> Vec<char> {
     let mut out: Vec<char> = vec!();
     let out_width = (input.len() + 1) / 2;
     for i in 0..out_width {
-        let a = input[i * 2] ^ invert;
-        let b;
-        if i * 2 + 1 >= input.len() {
-            b = false;
-        } else {
-            b = input[i * 2 + 1] ^ invert;
-        }
-        if a && b {
-            out.push('█');
-        } else if a && !b {
-            out.push('\u{258C}');   // left
-        } else if !a && b {
-            out.push('\u{2590}');   // right
-        } else if !a && !b {
-            out.push(' ');
-        }
+        let bar0 = input[i * 2] ^ invert;
+        let bar1 = if i * 2 + 1 < input.len() { input[i * 2 + 1] ^ invert } else { false };
+        out.push(
+            match (bar0, bar1) {
+                ( true,  true) => '█',
+                ( true, false) => '\u{258C}', // left
+                (false,  true) => '\u{2590}', // right
+                (false, false) => ' ',
+            }
+        );
     }
     return out;
 }
@@ -181,47 +176,47 @@ fn main() {
     let invert = DEFAULT_INVERT;
     let narrow = DEFAULT_NARROW;
     let args: Vec<String> = env::args().collect();
-    let mut bytes: Vec<u8> = vec!();    
-    bytes.push(104);    // start (B)
+    let mut symbols: Vec<u8> = vec!();
     for arg in &args[1..] {
+        symbols.clear();
+        symbols.push(104);    // start (B)
+
         for c in arg.chars() { 
-            bytes.push(c as u8 - 32);
+            symbols.push(c as u8 - 32);
         }
-        // let val: u8 = arg.parse().unwrap();
-        // bytes.push(val);
-    }
 
-    // checksum = SUM<(i+1) * X[i]> % 103
-    let mut checksum: u32 = 0;
-    let mut position: u32 = 0;
-    for b in &bytes {
-        if position == 0 {
-            checksum = *b as u32;
+        // checksum = SUM<(i+1) * X[i]> % 103
+        let mut checksum: u32 = 0;
+        let mut position: u32 = 0;
+        for b in &symbols {
+            if position == 0 {
+                checksum = *b as u32;
+            } else {
+                checksum += position * *b as u32;
+            }
+            position += 1;
+        }
+        checksum %= 103;
+        symbols.push(checksum as u8); // checksum
+        symbols.push(106);            // stop
+
+        // Add quiet zone (only after checksum calculation)
+        symbols.insert(0, 107);       // quiet
+        symbols.push(107);            // quiet
+
+        let bars = generate(&symbols);
+
+        let out;
+        if narrow {
+            out = render_narrow(&bars, invert);
         } else {
-            checksum += position * *b as u32;
+            out = render_wide(&bars, invert);
         }
-        position += 1;
-    }
-    checksum %= 103;
-    bytes.push(checksum as u8); // checksum
-    bytes.push(106);            // stop
-
-    // Add quiet zone (only after checksum calculation)
-    bytes.insert(0, 107);       // quiet
-    bytes.push(107);            // quiet
-
-    let bars = generate(&bytes);
-
-    let out;
-    if narrow {
-        out = render_narrow(&bars, invert);
-    } else {
-        out = render_wide(&bars, invert);
-    }
-    
-    let out_str: String = out.into_iter().collect();
-    for _j in 0..height {
-        println!("{}", out_str);
+        
+        let out_str: String = out.into_iter().collect();
+        for _j in 0..height {
+            println!("{}", out_str);
+        }
     }
 
 }
