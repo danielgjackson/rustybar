@@ -154,7 +154,7 @@ fn squish(input: &Vec<char>) -> Vec<char> {
     for i in 0..out_width {
         let a = input[i * 2];
         let b;
-        if (i * 2 + 1 >= input.len()) {
+        if i * 2 + 1 >= input.len() {
             b = ' ';
         } else {
             b = input[i * 2 + 1];
