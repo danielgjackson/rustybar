@@ -201,24 +201,50 @@ fn required_code(value: u8) -> Code {
     }
 }
 
+
 fn add_symbols(symbols: &mut Vec<u8>, arg: &String, existing_code: Code) -> Code {
     let mut current_code = existing_code;
 
-    for c in arg.chars() {
-        let b = c as u8;
-        let mut code = required_code(b);
-        if code == Code::None {
-            code = Code::CodeB;
+    let chars: Vec<char> = arg.chars().collect();
+    let mut j: usize = 0;
+
+    while j < chars.len()
+    {
+        let c0 = chars[j] as u8;
+        let c1 = if j + 1 >= chars.len() { '\x00' } else { chars[j + 1] };
+        let c2 = if j + 2 >= chars.len() { '\x00' } else { chars[j + 2] };
+        let c3 = if j + 3 >= chars.len() { '\x00' } else { chars[j + 3] };
+        
+        let mut code = required_code(c0);
+
+        // Code C if there are two numerical digits, but not if we're already in another code and there isn't a third and fourth.
+        if chars.len() >= 2 && c0.is_ascii_digit() && c1.is_ascii_digit() && !((!c2.is_ascii_digit() || !c3.is_ascii_digit()) && (current_code == Code::CodeA || current_code == Code::CodeB))
+        {
+            if current_code != Code::CodeC
+            {
+                symbols.push(code_symbol(current_code, Code::CodeC));
+                current_code = Code::CodeC;
+            }
+            symbols.push((c0 as u8 - '0' as u8) * 10 + (c1 as u8 - '0' as u8) as u8); // Code C double digits
+            j += 1;
         }
-        if current_code != code {
-            symbols.push(code_symbol(current_code, code));
-            current_code = code;
+        else
+        {
+            if code == Code::None
+            {
+                code = Code::CodeB;
+            }
+            if current_code != code {
+                symbols.push(code_symbol(current_code, code));
+                current_code = code;
+            }
+            if c0 < b' ' {
+                symbols.push(c0 as u8 + 64);
+            } else {
+                symbols.push(c0 as u8 - 32);
+            }
         }
-        if b < b' ' {
-            symbols.push(c as u8 + 64);
-        } else {
-            symbols.push(c as u8 - 32);
-        }
+        j += 1;
     }
 
     // Empty barcodes should still be valid
@@ -264,7 +290,7 @@ fn main() {
         //code = 
         add_symbols(&mut symbols, arg, code);
 
-        // println!("{:?}", symbols);
+println!("{:?}", symbols);
 
         // Calculate the checksum as the symbol before the end
         let checksum = calculate_checksum(&symbols);
