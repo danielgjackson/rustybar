@@ -12,6 +12,8 @@ To start:
 cargo run "Hello World!"
 ```
 
+**Note:** *GitHub*'s rendered Markdown line-spacing is likely to be wider than your terminal (so it shouldn't have gaps between the lines in your terminal).
+
 Output (not inverted, assuming dark-on-light):
 
 ```
