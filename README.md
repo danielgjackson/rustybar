@@ -6,8 +6,6 @@ Generates an CODE128 barcode in the console for the specified command-line argum
 
 Note that the barcode is inverted with additional 'quiet' areas either side for use in a light-on-dark terminal.  Change the `inverted` switch to reverse for dark-on-light.
 
-Uses "CODE B" only, so works with ASCII characters 32-128, and is not as efficient with numbers as using "CODE A" would be.
-
 To start:
 
 ```bash
